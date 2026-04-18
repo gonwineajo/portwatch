@@ -1,0 +1,27 @@
+# portwatch example configuration
+
+# Hosts to scan (IP addresses or hostnames)
+hosts:
+  - localhost
+  - 192.168.1.1
+
+# Port range to scan. Supports:
+#   single:  "80"
+#   list:    "22,80,443"
+#   range:   "1-1024"
+#   mixed:   "22,80,443,8000-9000"
+ports: "22,80,443,8000-9000"
+
+# How often to scan, in seconds (default: 60)
+interval: 60
+
+# Directory to store port snapshots (default: .portwatch)
+snapshot_dir: .portwatch
+
+# Alerting configuration
+alert:
+  # Alert type: stdout | webhook
+  type: stdout
+
+  # Webhook URL (required when type is webhook)
+  # webhook: https://hooks.example.com/portwatch
