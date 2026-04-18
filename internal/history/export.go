@@ -4,44 +4,38 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
-	"time"
+	"strconv"
+	"strings"
 )
 
-// ExportCSV writes history entries to w in CSV format.
-// Columns: timestamp, host, opened_ports, closed_ports
+// ExportCSV writes history entries as CSV to the given writer.
 func ExportCSV(entries []Entry, w io.Writer) error {
 	cw := csv.NewWriter(w)
-	defer cw.Flush()
-
-	if err := cw.Write([]string{"timestamp", "host", "opened_ports", "closed_ports"}); err != nil {
+	if err := cw.Write([]string{"timestamp", "host", "opened", "closed"}); err != nil {
 		return fmt.Errorf("write header: %w", err)
 	}
-
 	for _, e := range entries {
 		row := []string{
-			e.Timestamp.UTC().Format(time.RFC3339),
+			e.Timestamp.UTC().Format("2006-01-02T15:04:05Z"),
 			e.Host,
-			joinInts(e.OpenedPorts),
-			joinInts(e.ClosedPorts),
+			joinInts(e.Opened),
+			joinInts(e.Closed),
 		}
 		if err := cw.Write(row); err != nil {
 			return fmt.Errorf("write row: %w", err)
 		}
 	}
-
+	cw.Flush()
 	return cw.Error()
 }
 
-func joinInts(ports []int) string {
-	if len(ports) == 0 {
+func joinInts(vals []int) string {
+	if len(vals) == 0 {
 		return ""
 	}
-	out := ""
-	for i, p := range ports {
-		if i > 0 {
-			out += ";"
-		}
-		out += fmt.Sprintf("%d", p)
+	parts := make([]string, len(vals))
+	for i, v := range vals {
+		parts[i] = strconv.Itoa(v)
 	}
-	return out
+	return strings.Join(parts, ";")
 }
