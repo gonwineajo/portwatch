@@ -11,58 +11,50 @@ func TestAppendAndRead(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "history.json")
 
-	e1 := Entry{
-		Timestamp: time.Now().UTC().Truncate(time.Second),
-		Host:      "localhost",
-		Opened:    []int{80, 443},
-		Closed:    []int{},
-	}
-	if err := Append(path, e1); err != nil {
-		t.Fatalf("Append: %v", err)
-	}
+	e1 := Entry{Timestamp: time.Now(), Host: "localhost", Opened: []int{80}, Closed: []int{}}
+	e2 := Entry{Timestamp: time.Now(), Host: "localhost", Opened: []int{}, Closed: []int{80}}
 
-	e2 := Entry{
-		Timestamp: time.Now().UTC().Truncate(time.Second),
-		Host:      "localhost",
-		Opened:    []int{},
-		Closed:    []int{80},
+	if err := Append(path, e1); err != nil {
+		t.Fatalf("append e1: %v", err)
 	}
 	if err := Append(path, e2); err != nil {
-		t.Fatalf("Append second: %v", err)
+		t.Fatalf("append e2: %v", err)
 	}
 
-	log, err := Read(path)
+	entries, err := Read(path)
 	if err != nil {
-		t.Fatalf("Read: %v", err)
+		t.Fatalf("read: %v", err)
 	}
-	if len(log.Entries) != 2 {
-		t.Fatalf("expected 2 entries, got %d", len(log.Entries))
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(entries))
 	}
-	if log.Entries[0].Host != "localhost" {
-		t.Errorf("unexpected host: %s", log.Entries[0].Host)
+	if entries[0].Host != "localhost" {
+		t.Errorf("unexpected host: %s", entries[0].Host)
 	}
-	if len(log.Entries[0].Opened) != 2 {
-		t.Errorf("expected 2 opened ports in first entry")
+	if len(entries[0].Opened) != 1 || entries[0].Opened[0] != 80 {
+		t.Errorf("unexpected opened ports: %v", entries[0].Opened)
 	}
 }
 
 func TestRead_MissingFile(t *testing.T) {
-	log, err := Read("/tmp/portwatch_nonexistent_history.json")
+	entries, err := Read("/nonexistent/path/history.json")
 	if err != nil {
 		t.Fatalf("expected no error for missing file, got: %v", err)
 	}
-	if len(log.Entries) != 0 {
-		t.Errorf("expected empty log")
+	if len(entries) != 0 {
+		t.Errorf("expected empty entries, got %d", len(entries))
 	}
 }
 
 func TestAppend_CreatesDir(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "sub", "history.json")
-	e := Entry{Timestamp: time.Now(), Host: "h", Opened: []int{22}, Closed: []int{}}
+	path := filepath.Join(dir, "sub", "nested", "history.json")
+
+	e := Entry{Timestamp: time.Now(), Host: "example.com", Opened: []int{443}, Closed: []int{}}
 	if err := Append(path, e); err != nil {
-		t.Fatalf("Append: %v", err)
+		t.Fatalf("append: %v", err)
 	}
+
 	if _, err := os.Stat(path); err != nil {
 		t.Errorf("expected file to exist: %v", err)
 	}

@@ -3,7 +3,6 @@ package runner
 import (
 	"fmt"
 	"log"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -17,62 +16,64 @@ import (
 // Runner orchestrates scanning, diffing, alerting, and history recording.
 type Runner struct {
 	cfg     *config.Config
-	alert   *alert.Alerter
-	histDir string
+	alerter *alert.Alerter
 }
 
-// New creates a Runner from cfg, writing history under histDir.
-func New(cfg *config.Config, histDir string) *Runner {
+// New creates a new Runner from the given config.
+func New(cfg *config.Config) *Runner {
 	return &Runner{
 		cfg:     cfg,
-		alert:   alert.New(cfg),
-		histDir: histDir,
+		alerter: alert.New(cfg.AlertOutput),
 	}
 }
 
 // RunOnce performs a single scan cycle for all configured hosts.
 func (r *Runner) RunOnce() error {
+	if len(r.cfg.Hosts) == 0 {
+		return fmt.Errorf("no hosts configured")
+	}
 	for _, host := range r.cfg.Hosts {
-		if err := r.runHost(host); err != nil {
+		if err := r.scanHost(host); err != nil {
 			log.Printf("error scanning %s: %v", host, err)
 		}
 	}
 	return nil
 }
 
-func (r *Runner) runHost(host string) error {
-	sc := scanner.New(host, r.cfg.Ports, r.cfg.Timeout)
-	result, err := sc.Scan()
+func (r *Runner) scanHost(host string) error {
+	s := scanner.New(host, r.cfg.Ports, r.cfg.Timeout)
+	current, err := s.Scan()
 	if err != nil {
-		return fmt.Errorf("scan: %w", err)
+		return err
 	}
 
-	snapFile := snapshotFile(r.cfg.SnapshotDir, host)
-	old, _ := snapshot.Load(snapFile)
-	diff := snapshot.Compare(old, result)
+	file := snapshotFile(r.cfg.StateDir, host)
+	prev, _ := snapshot.Load(file)
+	diff := snapshot.Compare(prev, current)
+
+	if err := snapshot.Save(file, current); err != nil {
+		return fmt.Errorf("save snapshot: %w", err)
+	}
 
 	if len(diff.Opened) > 0 || len(diff.Closed) > 0 {
-		r.alert.Notify(host, diff)
-
+		r.alerter.Notify(host, diff)
 		entry := history.Entry{
-			Timestamp: time.Now().UTC(),
+			Timestamp: time.Now(),
 			Host:      host,
 			Opened:    diff.Opened,
 			Closed:    diff.Closed,
 		}
-		hPath := filepath.Join(r.histDir, snapshotFile("", host)+".history.json")
-		if herr := history.Append(hPath, entry); herr != nil {
-			log.Printf("history append: %v", herr)
+		if err := history.Append(historyFile(r.cfg.StateDir, host), entry); err != nil {
+			log.Printf("history append error for %s: %v", host, err)
 		}
 	}
-
-	return snapshot.Save(snapFile, result)
+	return nil
 }
 
 func snapshotFile(dir, host string) string {
-	safe := strings.ReplaceAll(host, ":", "_")
-	if dir == "" {
-		return safe
-	}
-	return filepath.Join(dir, safe+".json")
+	return fmt.Sprintf("%s/%s.json", dir, strings.ReplaceAll(host, ":", "_"))
+}
+
+func historyFile(dir, host string) string {
+	return fmt.Sprintf("%s/%s.history.json", dir, strings.ReplaceAll(host, ":", "_"))
 }

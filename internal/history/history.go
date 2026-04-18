@@ -2,13 +2,12 @@ package history
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 )
 
-// Entry records a port change event at a point in time.
+// Entry represents a single history record of port changes.
 type Entry struct {
 	Timestamp time.Time `json:"timestamp"`
 	Host      string    `json:"host"`
@@ -16,52 +15,43 @@ type Entry struct {
 	Closed    []int     `json:"closed"`
 }
 
-// Log holds a sequence of change entries.
-type Log struct {
-	Entries []Entry `json:"entries"`
-}
-
-// Append adds a new entry to the log file at path, creating it if needed.
-func Append(path string, e Entry) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("history: mkdir: %w", err)
-	}
-
-	log, err := load(path)
+// Append adds a new entry to the history file at path.
+func Append(path string, entry Entry) error {
+	entries, err := load(path)
 	if err != nil {
 		return err
 	}
-
-	log.Entries = append(log.Entries, e)
-
-	f, err := os.Create(path)
-	if err != nil {
-		return fmt.Errorf("history: create: %w", err)
-	}
-	defer f.Close()
-
-	enc := json.NewEncoder(f)
-	enc.SetIndent("", "  ")
-	return enc.Encode(log)
+	entries = append(entries, entry)
+	return write(path, entries)
 }
 
-// Read returns the full log from path.
-func Read(path string) (Log, error) {
+// Read returns all history entries from the file at path.
+func Read(path string) ([]Entry, error) {
 	return load(path)
 }
 
-func load(path string) (Log, error) {
-	var log Log
-	f, err := os.Open(path)
+func load(path string) ([]Entry, error) {
+	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
-		return log, nil
+		return []Entry{}, nil
 	}
 	if err != nil {
-		return log, fmt.Errorf("history: open: %w", err)
+		return nil, err
 	}
-	defer f.Close()
-	if err := json.NewDecoder(f).Decode(&log); err != nil {
-		return log, fmt.Errorf("history: decode: %w", err)
+	var entries []Entry
+	if err := json.Unmarshal(data, &entries); err != nil {
+		return nil, err
 	}
-	return log, nil
+	return entries, nil
+}
+
+func write(path string, entries []Entry) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(entries, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0o644)
 }
