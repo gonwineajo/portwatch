@@ -11,19 +11,19 @@ func TestAppendAndRead(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "history.json")
 
-	e1 := Entry{Timestamp: time.Now(), Host: "localhost", Opened: []int{80}, Closed: []int{}}
-	e2 := Entry{Timestamp: time.Now(), Host: "localhost", Opened: []int{}, Closed: []int{80}}
+	e1 := Entry{Timestamp: time.Now().UTC(), Host: "localhost", Opened: []uint16{80, 443}}
+	e2 := Entry{Timestamp: time.Now().UTC(), Host: "localhost", Closed: []uint16{80}}
 
 	if err := Append(path, e1); err != nil {
-		t.Fatalf("append e1: %v", err)
+		t.Fatalf("Append e1: %v", err)
 	}
 	if err := Append(path, e2); err != nil {
-		t.Fatalf("append e2: %v", err)
+		t.Fatalf("Append e2: %v", err)
 	}
 
 	entries, err := Read(path)
 	if err != nil {
-		t.Fatalf("read: %v", err)
+		t.Fatalf("Read: %v", err)
 	}
 	if len(entries) != 2 {
 		t.Fatalf("expected 2 entries, got %d", len(entries))
@@ -31,30 +31,29 @@ func TestAppendAndRead(t *testing.T) {
 	if entries[0].Host != "localhost" {
 		t.Errorf("unexpected host: %s", entries[0].Host)
 	}
-	if len(entries[0].Opened) != 1 || entries[0].Opened[0] != 80 {
-		t.Errorf("unexpected opened ports: %v", entries[0].Opened)
+	if len(entries[1].Closed) != 1 || entries[1].Closed[0] != 80 {
+		t.Errorf("unexpected closed ports: %v", entries[1].Closed)
 	}
 }
 
 func TestRead_MissingFile(t *testing.T) {
 	entries, err := Read("/nonexistent/path/history.json")
 	if err != nil {
-		t.Fatalf("expected no error for missing file, got: %v", err)
+		t.Fatalf("expected no error for missing file, got %v", err)
 	}
 	if len(entries) != 0 {
-		t.Errorf("expected empty entries, got %d", len(entries))
+		t.Errorf("expected empty slice, got %d entries", len(entries))
 	}
 }
 
 func TestAppend_CreatesDir(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "sub", "nested", "history.json")
+	path := filepath.Join(dir, "sub", "dir", "history.json")
 
-	e := Entry{Timestamp: time.Now(), Host: "example.com", Opened: []int{443}, Closed: []int{}}
+	e := Entry{Timestamp: time.Now().UTC(), Host: "10.0.0.1", Opened: []uint16{22}}
 	if err := Append(path, e); err != nil {
-		t.Fatalf("append: %v", err)
+		t.Fatalf("Append: %v", err)
 	}
-
 	if _, err := os.Stat(path); err != nil {
 		t.Errorf("expected file to exist: %v", err)
 	}

@@ -7,12 +7,12 @@ import (
 	"time"
 )
 
-// Entry represents a single history record of port changes.
+// Entry represents a single scan event recorded in history.
 type Entry struct {
 	Timestamp time.Time `json:"timestamp"`
 	Host      string    `json:"host"`
-	Opened    []int     `json:"opened"`
-	Closed    []int     `json:"closed"`
+	Opened    []uint16  `json:"opened,omitempty"`
+	Closed    []uint16  `json:"closed,omitempty"`
 }
 
 // Append adds a new entry to the history file at path.
@@ -25,7 +25,7 @@ func Append(path string, entry Entry) error {
 	return write(path, entries)
 }
 
-// Read returns all history entries from the file at path.
+// Read returns all entries from the history file at path.
 func Read(path string) ([]Entry, error) {
 	return load(path)
 }
