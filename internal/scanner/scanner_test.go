@@ -54,3 +54,19 @@ func TestScan_ResultHostSet(t *testing.T) {
 		t.Errorf("expected host 127.0.0.1, got %s", result.Host)
 	}
 }
+
+func TestScan_MultipleOpenPorts(t *testing.T) {
+	port1, close1 := startListener(t)
+	defer close1()
+	port2, close2 := startListener(t)
+	defer close2()
+
+	s := scanner.New()
+	result, err := s.Scan("127.0.0.1", []int{port1, port2})
+	if err != nil {
+		t.Fatalf("scan error: %v", err)
+	}
+	if len(result.Ports) != 2 {
+		t.Errorf("expected 2 open ports, got %v", result.Ports)
+	}
+}
