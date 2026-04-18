@@ -3,80 +3,76 @@ package runner
 import (
 	"fmt"
 	"log"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/user/portwatch/internal/alert"
 	"github.com/user/portwatch/internal/config"
+	"github.com/user/portwatch/internal/history"
 	"github.com/user/portwatch/internal/scanner"
 	"github.com/user/portwatch/internal/snapshot"
 )
 
-// Runner orchestrates scanning, snapshot diffing, and alerting.
+// Runner orchestrates scanning, diffing, alerting, and history recording.
 type Runner struct {
 	cfg     *config.Config
-	scanner *scanner.Scanner
-	alerter *alert.Alerter
+	alert   *alert.Alerter
+	histDir string
 }
 
-// New creates a Runner from the given config.
-func New(cfg *config.Config) *Runner {
+// New creates a Runner from cfg, writing history under histDir.
+func New(cfg *config.Config, histDir string) *Runner {
 	return &Runner{
 		cfg:     cfg,
-		scanner: scanner.New(cfg.Timeout),
-		alerter: alert.New(nil),
+		alert:   alert.New(cfg),
+		histDir: histDir,
 	}
 }
 
 // RunOnce performs a single scan cycle for all configured hosts.
 func (r *Runner) RunOnce() error {
 	for _, host := range r.cfg.Hosts {
-		if err := r.scanHost(host); err != nil {
-			log.Printf("error scanning host %s: %v", host, err)
+		if err := r.runHost(host); err != nil {
+			log.Printf("error scanning %s: %v", host, err)
 		}
 	}
 	return nil
 }
 
-// Watch runs scans in a loop at the configured interval.
-func (r *Runner) Watch() error {
-	log.Printf("starting portwatch (interval: %s)", r.cfg.Interval)
-	for {
-		if err := r.RunOnce(); err != nil {
-			log.Printf("scan cycle error: %v", err)
+func (r *Runner) runHost(host string) error {
+	sc := scanner.New(host, r.cfg.Ports, r.cfg.Timeout)
+	result, err := sc.Scan()
+	if err != nil {
+		return fmt.Errorf("scan: %w", err)
+	}
+
+	snapFile := snapshotFile(r.cfg.SnapshotDir, host)
+	old, _ := snapshot.Load(snapFile)
+	diff := snapshot.Compare(old, result)
+
+	if len(diff.Opened) > 0 || len(diff.Closed) > 0 {
+		r.alert.Notify(host, diff)
+
+		entry := history.Entry{
+			Timestamp: time.Now().UTC(),
+			Host:      host,
+			Opened:    diff.Opened,
+			Closed:    diff.Closed,
 		}
-		time.Sleep(r.cfg.Interval)
-	}
-}
-
-func (r *Runner) scanHost(host string) error {
-	result, err := r.scanner.Scan(host, r.cfg.Ports)
-	if err != nil {
-		return fmt.Errorf("scan failed: %w", err)
-	}
-
-	snapshotPath := snapshotFile(host)
-	prev, err := snapshot.Load(snapshotPath)
-	if err != nil {
-		// No previous snapshot; save current and continue.
-		return snapshot.Save(snapshotPath, result)
-	}
-
-	diff := snapshot.Compare(prev, result)
-	if err := r.alerter.Notify(host, diff); err != nil {
-		log.Printf("alert error for %s: %v", host, err)
-	}
-
-	return snapshot.Save(snapshotPath, result)
-}
-
-func snapshotFile(host string) string {
-	safe := ""
-	for _, c := range host {
-		if c == ':' || c == '/' {
-			safe += "_"
-		} else {
-			safe += string(c)
+		hPath := filepath.Join(r.histDir, snapshotFile("", host)+".history.json")
+		if herr := history.Append(hPath, entry); herr != nil {
+			log.Printf("history append: %v", herr)
 		}
 	}
-	return fmt.Sprintf(".portwatch/%s.json", safe)
+
+	return snapshot.Save(snapFile, result)
+}
+
+func snapshotFile(dir, host string) string {
+	safe := strings.ReplaceAll(host, ":", "_")
+	if dir == "" {
+		return safe
+	}
+	return filepath.Join(dir, safe+".json")
 }
