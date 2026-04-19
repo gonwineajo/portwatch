@@ -1,5 +1,5 @@
-// Package history manages the persistent record of port change events detected
-// by portwatch. It provides facilities to append new entries, read and filter
-// the log, export data to CSV, summarize activity over time, search by host or
-// port, apply retention policies, and compute port-frequency statistics.
+// Package history provides storage, querying, and analysis of port scan history.
+// Entries record opened/closed port events per host over time.
+// Sub-features include filtering, search, replay, timeline bucketing,
+// diff computation, retention pruning, CSV export, and aggregation.
 package history
