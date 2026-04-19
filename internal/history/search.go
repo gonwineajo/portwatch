@@ -27,6 +27,12 @@ func Search(entries []Entry, opts SearchOptions) []Entry {
 	return out
 }
 
+// SearchByHost returns all entries whose host contains the given substring.
+// It is a convenience wrapper around Search for host-only queries.
+func SearchByHost(entries []Entry, host string) []Entry {
+	return Search(entries, SearchOptions{Host: host})
+}
+
 func containsPort(e Entry, port int) bool {
 	for _, p := range e.Ports {
 		if p == port {
