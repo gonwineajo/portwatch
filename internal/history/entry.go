@@ -1,6 +1,7 @@
 package history
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/portwatch/internal/snapshot"
@@ -31,4 +32,10 @@ func (e Entry) Summary() string {
 		msg += " closed ports detected"
 	}
 	return msg
+}
+
+// String returns a formatted string representation of the entry including
+// the timestamp, host, and a summary of port changes.
+func (e Entry) String() string {
+	return fmt.Sprintf("[%s] %s", e.Timestamp.Format(time.RFC3339), e.Summary())
 }
