@@ -39,3 +39,8 @@ func (e Entry) Summary() string {
 func (e Entry) String() string {
 	return fmt.Sprintf("[%s] %s", e.Timestamp.Format(time.RFC3339), e.Summary())
 }
+
+// PortCounts returns the number of opened and closed ports recorded in the entry.
+func (e Entry) PortCounts() (opened, closed int) {
+	return len(e.Diff.Opened), len(e.Diff.Closed)
+}
