@@ -9,45 +9,51 @@ import (
 	"github.com/user/portwatch/internal/alert"
 	"github.com/user/portwatch/internal/config"
 	"github.com/user/portwatch/internal/history"
+	"github.com/user/portwatch/internal/notifier"
 	"github.com/user/portwatch/internal/scanner"
 	"github.com/user/portwatch/internal/snapshot"
 )
 
-// Runner orchestrates scanning, diffing, alerting, and history recording.
+// Runner orchestrates a single scan cycle.
 type Runner struct {
-	cfg     *config.Config
-	alerter *alert.Alerter
+	cfg      *config.Config
+	scanner  *scanner.Scanner
+	alerter  *alert.Alerter
+	notifier *notifier.Notifier
 }
 
-// New creates a new Runner from the given config.
+// New creates a Runner from the provided config.
 func New(cfg *config.Config) *Runner {
 	return &Runner{
-		cfg:     cfg,
-		alerter: alert.New(cfg.AlertOutput),
+		cfg:      cfg,
+		scanner:  scanner.New(cfg.Timeout),
+		alerter:  alert.New(nil),
+		notifier: notifier.New(cfg),
 	}
 }
 
-// RunOnce performs a single scan cycle for all configured hosts.
+// RunOnce performs a scan for every configured host and processes diffs.
 func (r *Runner) RunOnce() error {
 	if len(r.cfg.Hosts) == 0 {
 		return fmt.Errorf("no hosts configured")
 	}
+	ports, err := r.cfg.ParsedPorts()
+	if err != nil {
+		return fmt.Errorf("invalid port range: %w", err)
+	}
 	for _, host := range r.cfg.Hosts {
-		if err := r.scanHost(host); err != nil {
+		if err := r.scanHost(host, ports); err != nil {
 			log.Printf("error scanning %s: %v", host, err)
 		}
 	}
 	return nil
 }
 
-func (r *Runner) scanHost(host string) error {
-	s := scanner.New(host, r.cfg.Ports, r.cfg.Timeout)
-	current, err := s.Scan()
-	if err != nil {
-		return err
-	}
+func (r *Runner) scanHost(host string, ports []int) error {
+	result := r.scanner.Scan(host, ports)
+	current := snapshot.Snapshot{Host: host, Ports: result.Open, ScannedAt: time.Now()}
 
-	file := snapshotFile(r.cfg.StateDir, host)
+	file := snapshotFile(host, r.cfg.SnapshotDir)
 	prev, _ := snapshot.Load(file)
 	diff := snapshot.Compare(prev, current)
 
@@ -55,25 +61,34 @@ func (r *Runner) scanHost(host string) error {
 		return fmt.Errorf("save snapshot: %w", err)
 	}
 
-	if len(diff.Opened) > 0 || len(diff.Closed) > 0 {
-		r.alerter.Notify(host, diff)
-		entry := history.Entry{
-			Timestamp: time.Now(),
-			Host:      host,
-			Opened:    diff.Opened,
-			Closed:    diff.Closed,
+	r.alerter.Notify(diff)
+	r.notifier.Notify(diff)
+
+	entry := history.Entry{
+		Host:      host,
+		Timestamp: time.Now(),
+		Ports:     result.Open,
+		Event:     history.EventScan,
+	}
+	if history.HasChanges(diff) {
+		if len(diff.Opened) > 0 {
+			entry.Event = history.EventOpened
+		} else {
+			entry.Event = history.EventClosed
 		}
-		if err := history.Append(historyFile(r.cfg.StateDir, host), entry); err != nil {
-			log.Printf("history append error for %s: %v", host, err)
-		}
+	}
+	if err := history.Append(historyFile(host, r.cfg.HistoryDir), entry); err != nil {
+		return fmt.Errorf("append history: %w", err)
 	}
 	return nil
 }
 
-func snapshotFile(dir, host string) string {
-	return fmt.Sprintf("%s/%s.json", dir, strings.ReplaceAll(host, ":", "_"))
+func snapshotFile(host, dir string) string {
+	safe := strings.ReplaceAll(host, ":", "_")
+	return fmt.Sprintf("%s/%s.json", dir, safe)
 }
 
-func historyFile(dir, host string) string {
-	return fmt.Sprintf("%s/%s.history.json", dir, strings.ReplaceAll(host, ":", "_"))
+func historyFile(host, dir string) string {
+	safe := strings.ReplaceAll(host, ":", "_")
+	return fmt.Sprintf("%s/%s.json", dir, safe)
 }
