@@ -34,3 +34,9 @@ func Annotations(entries []Entry) []Entry {
 	}
 	return out
 }
+
+// ClearAnnotation removes the note from entries matching the given host and
+// timestamp. Returns the number of entries cleared.
+func ClearAnnotation(entries []Entry, host string, ts time.Time) ([]Entry, int) {
+	return Annotate(entries, host, ts, "")
+}
