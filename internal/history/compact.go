@@ -4,8 +4,8 @@ import "sort"
 
 // CompactResult holds the outcome of a compaction operation.
 type CompactResult struct {
-	Before int
-	After  int
+	Before  int
+	After   int
 	Removed int
 }
 
@@ -16,6 +16,9 @@ type CompactResult struct {
 //
 // Entries are processed in chronological order. The relative ordering
 // of surviving entries is preserved.
+//
+// Only EventScan entries are eligible for deduplication; all other event
+// types (e.g. EventOpen, EventClose) are always retained.
 func Compact(entries []Entry) ([]Entry, CompactResult) {
 	result := CompactResult{Before: len(entries)}
 	if len(entries) == 0 {
@@ -40,6 +43,8 @@ func Compact(entries []Entry) ([]Entry, CompactResult) {
 			// Identical stable scan — skip.
 			continue
 		}
+		// Always update the fingerprint so that a non-scan event followed
+		// by a scan with the same ports is still deduplicated correctly.
 		last[e.Host] = fp
 		out = append(out, e)
 	}
