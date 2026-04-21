@@ -35,6 +35,17 @@ func SetBaseline(entries []Entry) []Baseline {
 	return baselines
 }
 
+// FindBaseline returns the Baseline for the given host from the provided slice,
+// and a boolean indicating whether a match was found.
+func FindBaseline(baselines []Baseline, host string) (Baseline, bool) {
+	for _, b := range baselines {
+		if b.Host == host {
+			return b, true
+		}
+	}
+	return Baseline{}, false
+}
+
 // DeviatesFromBaseline returns ports that are open in current but not in the
 // baseline, and ports that are in the baseline but closed in current.
 func DeviatesFromBaseline(baseline Baseline, current []int) (opened []int, closed []int) {
