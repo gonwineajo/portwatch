@@ -1,6 +1,10 @@
 package history
 
-import "sort"
+import (
+	"fmt"
+	"sort"
+	"strings"
+)
 
 // NormalizeOptions controls how entries are normalized.
 type NormalizeOptions struct {
@@ -19,10 +23,6 @@ type NormalizeOptions struct {
 func Normalize(entries []Entry, opts NormalizeOptions) []Entry {
 	out := make([]Entry, 0, len(entries))
 
-	type scanKey struct {
-		host        string
-		fingerprint string
-	}
 	lastScan := make(map[string]string) // host → last fingerprint
 
 	for _, e := range entries {
@@ -52,6 +52,16 @@ func Normalize(entries []Entry, opts NormalizeOptions) []Entry {
 		out = append(out, e)
 	}
 	return out
+}
+
+// portFingerprint returns a stable string representation of a sorted port list,
+// used to detect duplicate consecutive scans for the same host.
+func portFingerprint(ports []int) string {
+	parts := make([]string, len(ports))
+	for i, p := range ports {
+		parts[i] = fmt.Sprintf("%d", p)
+	}
+	return strings.Join(parts, ",")
 }
 
 // copyEntry performs a shallow copy of an Entry with independent port slices.
