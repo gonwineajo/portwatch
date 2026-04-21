@@ -72,6 +72,30 @@ func TestHeatmap_MultipleHosts(t *testing.T) {
 	}
 }
 
+func TestHeatmap_SpansMultipleDays(t *testing.T) {
+	// Entries on different calendar days but same hour should be aggregated by hour.
+	day1 := Entry{
+		Timestamp:   time.Date(2024, 1, 10, 9, 0, 0, 0, time.UTC),
+		Host:        "host-c",
+		Event:       "scan",
+		OpenedPorts: []int{80},
+	}
+	day2 := Entry{
+		Timestamp:   time.Date(2024, 1, 11, 9, 0, 0, 0, time.UTC),
+		Host:        "host-c",
+		Event:       "scan",
+		OpenedPorts: []int{443},
+	}
+
+	cells := Heatmap([]Entry{day1, day2})
+	if len(cells) != 1 {
+		t.Fatalf("expected 1 cell for same hour across days, got %d", len(cells))
+	}
+	if cells[0].Hour != 9 || cells[0].Changes != 2 {
+		t.Errorf("expected hour=9 changes=2, got hour=%d changes=%d", cells[0].Hour, cells[0].Changes)
+	}
+}
+
 func TestPeakHour_ReturnsCorrectHour(t *testing.T) {
 	entries := []Entry{
 		heatEntry("h", []int{80, 443, 22}, nil, 9),
